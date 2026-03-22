@@ -2,9 +2,9 @@
 *.nix linguist-detectable=true
 
 # Markdown Documentation
-*.md merge=union
-*.md linguist-detectable=true
-*.md linguist-documentation=false
+# *.md merge=union
+# *.md linguist-detectable=true
+# *.md linguist-documentation=false
 
 # Bash Scripts
 *.sh linguist-detectable=true
