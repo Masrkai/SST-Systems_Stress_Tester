@@ -1,9 +1,10 @@
 #? Project Initialization and Compiler Settings
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.19) # bumped from 3.10 -- FetchContent + Slint need >=3.19
 project(SystemStressTest)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # lets clangd (your shell.nix already has clang-tools) see include paths
 
 
 # a comment to check collaboration ability!
@@ -122,6 +123,44 @@ add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 # Link threading library
 find_package(Threads REQUIRED)
 target_link_libraries(${PROJECT_NAME} Threads::Threads)
+
+
+
+
+#? Slint GUI Target
+# nixpkgs has no ready-made `slint` CMake package (only slint-lsp, the editor
+# language server) -- so this pulls Slint's source at configure time and
+# builds it via Corrosion. That means shell.nix needs `rustc` + `cargo`
+# available (see updated shell.nix), since Slint's C++ API is backed by its
+# Rust runtime under the hood.
+include(FetchContent)
+
+# Slint auto-detects Qt at configure time and tries to build an optional Qt
+# backend if found -- that backend needs OpenGL dev headers (GL/gl.h) that
+# aren't available in this shell, and we don't need Qt for this UI anyway
+# (the default winit + renderer backend is what main_gui.cpp targets).
+# Setting this before FetchContent_MakeAvailable prevents Slint's own
+# CMakeLists from ever attempting the Qt backend build.
+set(SLINT_FEATURE_BACKEND_QT OFF CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+    Slint
+    GIT_REPOSITORY https://github.com/slint-ui/slint.git
+    GIT_TAG v1.17.1
+    SOURCE_SUBDIR api/cpp
+)
+FetchContent_MakeAvailable(Slint)
+
+add_executable(sst_gui
+    src/main_gui.cpp
+    ${TEST_SOURCES}
+)
+target_include_directories(sst_gui PRIVATE include)
+target_link_libraries(sst_gui PRIVATE Threads::Threads Slint::Slint)
+
+# Compiles ui/stress_test_ui.slint into a generated stress_test_ui.h,
+# available to main_gui.cpp via #include "stress_test_ui.h"
+slint_target_sources(sst_gui ui/stress_test_ui.slint)
 
 
 

@@ -6,3 +6,4 @@ result
 build
 debug
 profiling
+.cache/
