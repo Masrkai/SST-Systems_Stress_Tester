@@ -22,6 +22,7 @@ pkgs.mkShell {
   packages = with pkgs; [
     gcc
     cmake
+    gnumake
 
     stdenv.cc
     stdenv.cc.cc
@@ -90,22 +91,20 @@ pkgs.mkShell {
   #* Sadly this can't be done in a shell and instead done system-wide so i need you to realize understand and evaluate
   #* the Risks comes with this
 
-  shellHook = "
-    unset MAKEFLAGS
+  # Ensure CMake can find the compilers
+  CMAKE_C_COMPILER = "${pkgs.gcc}/bin/gcc";
+  CMAKE_CXX_COMPILER = "${pkgs.gcc}/bin/g++";
 
-    export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [
-      pkgs.wayland
-      pkgs.libxkbcommon
-      pkgs.libGL
-      pkgs.fontconfig
-      pkgs.freetype
-    ]}:\$LD_LIBRARY_PATH
+  shellHook = ''
+    # Export compiler paths explicitly
+    export CC="${pkgs.gcc}/bin/gcc"
+    export CXX="${pkgs.gcc}/bin/g++"
 
     ${builtins.readFile ./Scripts/kernel_security_bypass.sh}
     ${builtins.readFile ./Scripts/build_release.sh}
     ${builtins.readFile ./Scripts/build_profiling.sh}
 
-  ";
+  '';
 
     # ${builtins.readFile ./Scripts/profile.sh}
 
