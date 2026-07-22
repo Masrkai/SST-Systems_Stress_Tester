@@ -3,12 +3,18 @@
 # build profiling version automatically
 echo ""
 profiling_dir="profiling"
+
+if [ -f "$profiling_dir/CMakeCache.txt" ] && ! grep -q "CMAKE_GENERATOR:INTERNAL=Ninja" "$profiling_dir/CMakeCache.txt"; then
+    echo "Existing profiling dir uses a different generator — wiping for a clean Ninja config..."
+    rm -rf "$profiling_dir"
+fi
+
 mkdir -p "$profiling_dir"
 cd "$profiling_dir"
 
 echo "Building Profiling version for performance analysis..."
-cmake -DCMAKE_BUILD_TYPE=Profiling ..
-make
+cmake -GNinja -DCMAKE_BUILD_TYPE=Profiling ..
+cmake --build .
 
 echo "Profiling build completed in '$profiling_dir' directory!"
 

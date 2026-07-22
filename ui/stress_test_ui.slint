@@ -1,0 +1,294 @@
+// stress_test_ui.slint
+// UI-only declaration for SST-Systems_Stress_Tester.
+// No logic lives here — every value below is a property or callback
+// meant to be driven/consumed from C++ (main.cpp / SystemStressTestManager).
+
+import { Button, Slider, ProgressIndicator } from "std-widgets.slint";
+
+// Colors mirrored 1:1 from include/ConsoleColors.hpp
+global ConsoleColors {
+    out property <color> cyan: #1D9E75;      // time / elapsed
+    out property <color> magenta: #D4537E;   // banners / titles
+    out property <color> yellow: #EF9F27;    // thread pool events, warnings
+    out property <color> green: #639922;     // memory, good bandwidth
+    out property <color> red: #E24B4A;       // stop / danger, bad_alloc
+    out property <color> blue: #378ADD;      // core count / info
+}
+
+// --- A single metric tile (Elapsed / Cores / Hash ops / Bandwidth) -------
+component MetricCard inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> unit: "";
+    in property <color> accent: black;
+
+    background: #1a1a1a;
+    border-radius: 8px;
+    // padding: 12px;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 4px;
+        Text {
+            text: label;
+            font-size: 12px;
+            color: #999999;
+        }
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: start;
+            Text {
+                text: value;
+                font-size: 22px;
+                font-weight: 500;
+                color: accent;
+            }
+            Text {
+                text: unit;
+                font-size: 12px;
+                color: #666666;
+                vertical-alignment: bottom;
+            }
+        }
+    }
+}
+
+// --- One row in the CPU thread panel --------------------------------------
+component ThreadBar inherits Rectangle {
+    in property <int> thread-index;
+    in property <float> load;        // 0.0 .. 1.0
+    height: 16px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: "thread " + thread-index;
+            font-size: 11px;
+            color: #999999;
+            width: 56px;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            background: #262626;
+            border-radius: 4px;
+            Rectangle {
+                x: 0; y: 0;
+                height: 100%;
+                width: parent.width * load;
+                background: ConsoleColors.cyan;
+                border-radius: 4px;
+            }
+        }
+    }
+}
+
+// --- A titled panel wrapper (CPU panel, Memory panel) ---------------------
+component Panel inherits Rectangle {
+    in property <string> title;
+    in property <color> icon-color;
+    background: #1a1a1a;
+    border-radius: 12px;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+        Text {
+            text: title;
+            font-size: 14px;
+            font-weight: 500;
+            color: icon-color;
+        }
+        @children
+    }
+}
+
+export component StressTestWindow inherits Window {
+    title: "System Stress Tester";
+    width: 700px;
+    height: 640px;
+    background: #101010;
+    icon: @image-url("icon.png");
+
+    // ---- state driven from C++ --------------------------------------
+    in property <bool> is-running: false;
+
+    in property <int> elapsed-seconds: 0;
+    in property <int> test-duration-seconds: 30;
+
+    in property <int> core-count: 0;
+    in property <int> hash-ops: 0;               // already formatted-friendly int
+    in property <string> hash-ops-display: "0";  // e.g. "4.2M", computed in C++
+
+    in property <float> bandwidth-mbps: 0.0;
+    in property <color> bandwidth-color: ConsoleColors.green; // C++ picks per thresholds
+
+    in property <[float]> thread-loads: [];       // one entry per active thread, 0..1
+    in property <string> thread-event-text: "";   // e.g. "thread 3 added — load rising"
+    in property <bool> show-thread-event: false;
+
+    in property <int> memory-allocated-mb: 0;
+    in property <int> memory-target-mb: 0;
+
+    in-out property <int> selected-duration-seconds: 30; // bound to the slider
+
+    // ---- events sent up to C++ --------------------------------------
+    callback start-clicked();
+    callback stop-clicked();
+    callback duration-changed(int);
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        // Header
+        HorizontalLayout {
+            alignment: space-between;
+            VerticalLayout {
+                spacing: 2px;
+                Text {
+                    text: "System Stress Tester";
+                    font-size: 18px;
+                    font-weight: 500;
+                    color: ConsoleColors.magenta;
+                }
+                Text {
+                    text: "CPU + Memory load generator";
+                    font-size: 13px;
+                    color: #999999;
+                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: end;
+                Rectangle {
+                    background: is-running ? #223318 : #333333;
+                    border-radius: 6px;
+                    width: 74px;
+                    height: 24px;
+                    Text {
+                        text: is-running ? "Running" : "Idle";
+                        color: is-running ? ConsoleColors.green : #999999;
+                        font-size: 12px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Button {
+                    text: is-running ? "Stop test" : "Start test";
+                    clicked => {
+                        if (is-running) {
+                            stop-clicked();
+                        } else {
+                            start-clicked();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Metric row
+        HorizontalLayout {
+            spacing: 12px;
+            MetricCard {
+                label: "Elapsed";
+                value: elapsed-seconds;
+                unit: "/ " + test-duration-seconds + "s";
+                accent: ConsoleColors.cyan;
+            }
+            MetricCard {
+                label: "CPU cores";
+                value: core-count;
+                accent: white;
+            }
+            MetricCard {
+                label: "Hash ops";
+                value: hash-ops-display;
+                accent: white;
+            }
+            MetricCard {
+                label: "RAM bandwidth";
+                value: bandwidth-mbps;
+                unit: "MB/s";
+                accent: bandwidth-color;
+            }
+        }
+
+        // CPU panel — grows/shrinks with thread-loads array
+        Panel {
+            title: "CPU threads (scales with load)";
+            icon-color: ConsoleColors.blue;
+            VerticalLayout {
+                spacing: 6px;
+                for load[i] in thread-loads: ThreadBar {
+                    thread-index: i;
+                    load: load;
+                }
+                if show-thread-event: Rectangle {
+                    background: #2a2410;
+                    border-radius: 4px;
+                    height: 22px;
+                    Text {
+                        text: thread-event-text;
+                        color: ConsoleColors.yellow;
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Memory panel
+        Panel {
+            title: "Memory allocated";
+            icon-color: ConsoleColors.green;
+            VerticalLayout {
+                spacing: 6px;
+                Rectangle {
+                    height: 10px;
+                    background: #262626;
+                    border-radius: 5px;
+                    Rectangle {
+                        x: 0; y: 0;
+                        height: 100%;
+                        width: parent.width * (memory-target-mb > 0 ? memory-allocated-mb / memory-target-mb : 0);
+                        background: ConsoleColors.green;
+                        border-radius: 5px;
+                    }
+                }
+                Text {
+                    text: memory-allocated-mb + " MB / " + memory-target-mb + " MB target";
+                    font-size: 12px;
+                    color: #999999;
+                }
+            }
+        }
+
+        // Duration control — disabled once the test is running
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Duration";
+                font-size: 13px;
+                color: #999999;
+                vertical-alignment: center;
+            }
+            Slider {
+                minimum: 10;
+                maximum: 120;
+                value: selected-duration-seconds;
+                enabled: !is-running;
+                changed(value) => {
+                    selected-duration-seconds = value;
+                    duration-changed(value);
+                }
+            }
+            Text {
+                text: selected-duration-seconds + "s";
+                font-size: 13px;
+                font-weight: 500;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
